@@ -47,6 +47,8 @@ import ContainerInstanceCache from './store/container-instance-cache';
 import InternalModel from "./model/internal-model";
 import isEnabled from '../features';
 
+import _normalizeLink from './normalize-link';
+
 const badIdFormatAssertion = '`id` passed to `findRecord()` has to be non-empty string or number';
 
 const {
@@ -866,7 +868,7 @@ Store = Service.extend({
       let recordFetch = store._fetchRecord(
         recordResolverPair.internalModel,
         recordResolverPair.options
-      );  // TODO adapter options
+      ); // TODO adapter options
 
       recordResolverPair.resolver.resolve(recordFetch);
     }
@@ -2770,7 +2772,7 @@ function _commit(adapter, store, operation, snapshot) {
   let serializer = serializerForAdapter(store, adapter, modelName);
   let label = `DS: Extract and notify about ${operation} completion of ${internalModel}`;
 
-  assert(`Your adapter's '${operation}' method must return a value, but it returned 'undefined'`, promise !==undefined);
+  assert(`Your adapter's '${operation}' method must return a value, but it returned 'undefined'`, promise !== undefined);
 
   promise = Promise.resolve(promise, label);
   promise = _guard(promise, _bind(_objectIsAlive, store));
@@ -2836,7 +2838,7 @@ function isInverseRelationshipInitialized(store, internalModel, data, key, model
   let { name: inverseRelationshipName } = inverseRelationshipMetadata;
 
   if (Array.isArray(relationshipData)) {
-    for (let i=0; i<relationshipData.length; ++i) {
+    for (let i = 0; i < relationshipData.length; ++i) {
       let inverseInternalModel = store._internalModelsFor(relationshipData[i].type).get(relationshipData[i].id);
       if (inverseInternalModel && inverseInternalModel._relationships.has(inverseRelationshipName)) {
         return true;
@@ -2876,7 +2878,7 @@ function setupRelationships(store, internalModel, data, modelNameToInverseMap) {
 
       if (relationshipData.links) {
         let isAsync = relationshipMeta.options && relationshipMeta.options.async !== false;
-        warn(`You pushed a record of type '${internalModel.type.modelName}' with a relationship '${relationshipName}' configured as 'async: false'. You've included a link but no primary data, this may be an error in your payload.`, isAsync || relationshipData.data , {
+        warn(`You pushed a record of type '${internalModel.type.modelName}' with a relationship '${relationshipName}' configured as 'async: false'. You've included a link but no primary data, this may be an error in your payload.`, isAsync || relationshipData.data, {
           id: 'ds.store.push-link-for-sync-relationship'
         });
       } else if (relationshipData.data) {
@@ -2890,5 +2892,17 @@ function setupRelationships(store, internalModel, data, modelNameToInverseMap) {
   });
 }
 
-export { Store };
+export {
+  Store,
+  _bind,
+  _guard,
+  _objectIsAlive,
+  normalizeResponseHelper,
+  serializerForAdapter,
+  _commit,
+  defaultSerializer,
+  isInverseRelationshipInitialized,
+  setupRelationships,
+  _normalizeLink
+};
 export default Store;
