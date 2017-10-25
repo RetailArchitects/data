@@ -1,8 +1,8 @@
 {
   "name": "ember-data",
-  "version": "2.14.0-canary",
+  "version": "2.16.0",
   "description": "A data layer for your Ember applications.",
-  "repository": "git://github.com/emberjs/data.git",
+  "repository": "https://github.com/RetailArchitects/data",
   "directories": {
     "doc": "doc",
     "test": "tests"
