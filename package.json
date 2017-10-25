@@ -1,5 +1,5 @@
 {
-  "name": "ember-data",
+  "name": "@retail-architects/ember-data",
   "version": "2.16.0",
   "description": "A data layer for your Ember applications.",
   "repository": "https://github.com/RetailArchitects/data",
