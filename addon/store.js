@@ -1,7 +1,6 @@
 import Store from "./-private/system/store";
 
 import {
-  Store,
   _bind,
   _guard,
   _objectIsAlive,
