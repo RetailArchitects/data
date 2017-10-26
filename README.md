@@ -1,5 +1,14 @@
 ## Ember Data [![Build Status](https://secure.travis-ci.org/emberjs/data.svg?branch=master)](http://travis-ci.org/emberjs/data) [![Code Climate](https://codeclimate.com/github/emberjs/data/badges/gpa.svg)](https://codeclimate.com/github/emberjs/data)
 
+
+Forked from the awesome emberjs/data library. It does have some warts 
+though with some idealistic thinking about what your API should and
+shouldn't be doing. As a result, if you really have to override some
+deep functionality, they've made it impossible to import some of these
+functions. So, all this fork does is make those explicitly exported for
+override / monkey-patching. Here there be dragons and you should NOT use 
+this unless there is no other route.
+
 Ember Data is a library for robustly managing model data in your
 Ember.js applications.
 
