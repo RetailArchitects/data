@@ -2,17 +2,24 @@
   @module ember-data
 */
 
+import { A } from '@ember/array';
+
+import { copy } from '@ember/object/internals';
+import EmberError from '@ember/error';
+import MapWithDefault from '@ember/map/with-default';
+import { run as emberRun } from '@ember/runloop';
+import { set, get, computed } from '@ember/object';
+import RSVP from 'rsvp';
+import Service from '@ember/service';
+import { typeOf, isPresent, isNone } from '@ember/utils';
+
 import Ember from 'ember';
-import {
-  instrument,
-  assert,
-  deprecate,
-  warn,
-  runInDebug
-} from "ember-data/-private/debug";
-import Model from '../../model';
+import { InvalidError } from '../adapters/errors';
+import { instrument } from 'ember-data/-debug';
+import { assert, deprecate, warn, inspect } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
+import Model from './model/model';
 import normalizeModelName from "./normalize-model-name";
-import { InvalidError } from '../../adapters/errors';
 import IdentityMap from './identity-map';
 
 import {
@@ -52,22 +59,8 @@ import _normalizeLink from './normalize-link';
 const badIdFormatAssertion = '`id` passed to `findRecord()` has to be non-empty string or number';
 
 const {
-  A,
   _Backburner: Backburner,
-  computed,
-  copy,
-  ENV,
-  Error: EmberError,
-  get,
-  inspect,
-  isNone,
-  isPresent,
-  MapWithDefault,
-  run: emberRun,
-  set,
-  RSVP,
-  Service,
-  typeOf
+  ENV
 } = Ember;
 
 const { Promise } = RSVP;
@@ -198,7 +191,7 @@ const {
 
   Note: When creating a new record using any of the above methods
   Ember Data will update `DS.RecordArray`s such as those returned by
-  `store#peekAll()`, `store#findAll()` or `store#filter()`. This means any
+  `store#peekAll()` or `store#findAll()`. This means any
   data bindings or computed properties that depend on the RecordArray
   will automatically be synced to include the new or updated record
   values.
@@ -372,7 +365,9 @@ Store = Service.extend({
 
     // TODO @runspired this should also be coalesced into some form of internalModel.setState()
     internalModel.eachRelationship((key, descriptor) => {
-      internalModel._relationships.get(key).setHasData(true);
+      if (properties[key] !== undefined) {
+        internalModel._relationships.get(key).setHasData(true);
+      }
     });
 
     return record;
@@ -455,7 +450,7 @@ Store = Service.extend({
     @private
   */
   find(modelName, id, options) {
-    // The default `model` hook in Ember.Route calls `find(modelName, id)`,
+    // The default `model` hook in Route calls `find(modelName, id)`,
     // that's why we have to keep this method around even though `findRecord` is
     // the public way to get a record by modelName and id.
     assert(`Using store.find(type) has been removed. Use store.findAll(modelName) to retrieve all records for a given type.`, arguments.length !== 1);
@@ -482,9 +477,9 @@ Store = Service.extend({
     Example
 
     ```app/routes/post.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model(params) {
         return this.store.findRecord('post', params.post_id);
       }
@@ -602,22 +597,22 @@ Store = Service.extend({
     `findRecord`.
 
     ```app/routes/post/edit.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model(params) {
         return this.store.findRecord('post', params.post_id, { backgroundReload: false });
       }
     });
     ```
 
-   If you pass an object on the `adapterOptions` property of the options
-   argument it will be passed to you adapter via the snapshot
+    If you pass an object on the `adapterOptions` property of the options
+    argument it will be passed to you adapter via the snapshot
 
     ```app/routes/post/edit.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model(params) {
         return this.store.findRecord('post', params.post_id, {
           adapterOptions: { subscribe: false }
@@ -644,7 +639,7 @@ Store = Service.extend({
     ### Retrieving Related Model Records
 
     If you use an adapter such as Ember's default
-    [`JSONAPIAdapter`](http://emberjs.com/api/data/classes/DS.JSONAPIAdapter.html)
+    [`JSONAPIAdapter`](https://emberjs.com/api/data/classes/DS.JSONAPIAdapter.html)
     that supports the [JSON API specification](http://jsonapi.org/) and if your server
     endpoint supports the use of an
     ['include' query parameter](http://jsonapi.org/format/#fetching-includes),
@@ -656,11 +651,11 @@ Store = Service.extend({
     comments in the same request:
 
     ```app/routes/post.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model(params) {
-       return this.store.findRecord('post', params.post_id, { include: 'comments' });
+        return this.store.findRecord('post', params.post_id, { include: 'comments' });
       }
     });
 
@@ -674,11 +669,11 @@ Store = Service.extend({
     comments and the authors of those comments the request would look like this:
 
     ```app/routes/post.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model(params) {
-       return this.store.findRecord('post', params.post_id, { include: 'comments,comments.author' });
+        return this.store.findRecord('post', params.post_id, { include: 'comments,comments.author' });
       }
     });
 
@@ -935,29 +930,31 @@ Store = Service.extend({
 
       let groups = adapter.groupRecordsForFindMany(this, snapshots);
 
-      for (let i = 0, l = groups.length; i < l; i++) {
-        let group = groups[i];
-        let totalInGroup = groups[i].length;
-        let ids = new Array(totalInGroup);
-        let groupedInternalModels = new Array(totalInGroup);
+      for (var i = 0, l = groups.length; i < l; i++) {
+        var group = groups[i];
+        var totalInGroup = groups[i].length;
+        var ids = new Array(totalInGroup);
+        var groupedInternalModels = new Array(totalInGroup);
 
-        for (let j = 0; j < totalInGroup; j++) {
-          let internalModel = group[j]._internalModel;
+        for (var j = 0; j < totalInGroup; j++) {
+          var internalModel = group[j]._internalModel;
 
           groupedInternalModels[j] = internalModel;
           ids[j] = internalModel.id;
         }
 
         if (totalInGroup > 1) {
-          _findMany(adapter, store, modelName, ids, groupedInternalModels)
-            .then(function(foundInternalModels) {
-              handleFoundRecords(foundInternalModels, groupedInternalModels);
-            })
-            .catch(function(error) {
-              rejectInternalModels(groupedInternalModels, error);
-            });
+          (function(groupedInternalModels) {
+            _findMany(adapter, store, modelName, ids, groupedInternalModels)
+              .then(function(foundInternalModels) {
+                handleFoundRecords(foundInternalModels, groupedInternalModels);
+              })
+              .catch(function(error) {
+                rejectInternalModels(groupedInternalModels, error);
+              });
+          }(groupedInternalModels));
         } else if (ids.length === 1) {
-          let pair = seeking[groupedInternalModels[0].id];
+          var pair = seeking[groupedInternalModels[0].id];
           _fetchRecord(pair);
         } else {
           assert("You cannot return an empty array from adapter's method groupRecordsForFindMany", false);
@@ -1125,11 +1122,16 @@ Store = Service.extend({
     let trueId = coerceId(id);
     let internalModel = this._internalModelsFor(modelName).get(trueId);
 
-    if (!internalModel) {
-      internalModel = this._buildInternalModel(modelName, trueId);
+    if (internalModel) {
+      if (internalModel.hasScheduledDestroy()) {
+        internalModel.destroySync();
+        return this._buildInternalModel(modelName, trueId);
+      } else {
+        return internalModel;
+      }
+    } else {
+      return this._buildInternalModel(modelName, trueId);
     }
-
-    return internalModel;
   },
 
   _internalModelDidReceiveRelationshipData(modelName, id, relationshipData) {
@@ -1245,7 +1247,7 @@ Store = Service.extend({
     ```
 
     This method returns a promise, which is resolved with an
-    [`AdapterPopulatedRecordArray`](http://emberjs.com/api/data/classes/DS.AdapterPopulatedRecordArray.html)
+    [`AdapterPopulatedRecordArray`](https://emberjs.com/api/data/classes/DS.AdapterPopulatedRecordArray.html)
     once the server returns.
 
     @since 1.13.0
@@ -1271,8 +1273,6 @@ Store = Service.extend({
 
     let modelToken = heimdall.start('initial-modelFor-lookup');
     heimdall.stop(modelToken);
-
-    array = array || this.recordArrayManager.createAdapterPopulatedRecordArray(modelName, query);
 
     let adapterToken = heimdall.start('initial-adapterFor-lookup');
     let adapter = this.adapterFor(modelName);
@@ -1324,11 +1324,12 @@ Store = Service.extend({
     The request is made through the adapters' `queryRecord`:
 
     ```app/adapters/user.js
+    import $ from 'jquery';
     import DS from 'ember-data';
 
     export default DS.Adapter.extend({
       queryRecord(modelName, query) {
-        return Ember.$.getJSON('/api/current_user');
+        return $.getJSON('/api/current_user');
       }
     });
     ```
@@ -1413,9 +1414,9 @@ Store = Service.extend({
     of them.
 
     ```app/routes/authors.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model(params) {
         return this.store.findAll('author');
       }
@@ -1462,8 +1463,8 @@ Store = Service.extend({
     which the promise resolves, is updated automatically so it contains all the
     records in the store:
 
-    ```js
-    // app/adapters/application.js
+    ```app/adapters/application.js
+    import DS from 'ember-data';
     export default DS.Adapter.extend({
       shouldReloadAll(store, snapshotsArray) {
         return false;
@@ -1506,9 +1507,9 @@ Store = Service.extend({
     `findAll`.
 
     ```app/routes/post/edit.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model() {
         return this.store.findAll('post', { backgroundReload: false });
       }
@@ -1519,9 +1520,9 @@ Store = Service.extend({
     argument it will be passed to you adapter via the `snapshotRecordArray`
 
     ```app/routes/posts.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model(params) {
         return this.store.findAll('post', {
           adapterOptions: { subscribe: false }
@@ -1549,7 +1550,7 @@ Store = Service.extend({
     ### Retrieving Related Model Records
 
     If you use an adapter such as Ember's default
-    [`JSONAPIAdapter`](http://emberjs.com/api/data/classes/DS.JSONAPIAdapter.html)
+    [`JSONAPIAdapter`](https://emberjs.com/api/data/classes/DS.JSONAPIAdapter.html)
     that supports the [JSON API specification](http://jsonapi.org/) and if your server
     endpoint supports the use of an
     ['include' query parameter](http://jsonapi.org/format/#fetching-includes),
@@ -1561,11 +1562,11 @@ Store = Service.extend({
     all of the posts' comments in the same request:
 
     ```app/routes/posts.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model() {
-       return this.store.findAll('post', { include: 'comments' });
+        return this.store.findAll('post', { include: 'comments' });
       }
     });
 
@@ -1576,11 +1577,11 @@ Store = Service.extend({
     comments and the authors of those comments the request would look like this:
 
     ```app/routes/posts.js
-    import Ember from 'ember';
+    import Route from '@ember/routing/route';
 
-    export default Ember.Route.extend({
+    export default Route.extend({
       model() {
-       return this.store.findAll('post', { include: 'comments,comments.author' });
+        return this.store.findAll('post', { include: 'comments,comments.author' });
       }
     });
 
@@ -1654,13 +1655,11 @@ Store = Service.extend({
   */
   _didUpdateAll(modelName) {
     heimdall.increment(_didUpdateAll);
-    let liveRecordArray = this.recordArrayManager.liveRecordArrayFor(modelName);
-
-    set(liveRecordArray, 'isUpdating', false);
+    this.recordArrayManager._didUpdateAll(modelName);
   },
 
   didUpdateAll(modelName) {
-    deprecate('didUpdateAll was documented as private and will be removed in the next version of Ember Data.');
+    deprecate('didUpdateAll was documented as private and will be removed in the next version of Ember Data.', false, { id: 'ember-data.didUpdateAll', until: '2.17.0' });
     return this._didUpdateAll(modelName);
   },
 
@@ -1693,26 +1692,22 @@ Store = Service.extend({
     assert(`You need to pass a model name to the store's peekAll method`, isPresent(modelName));
     assert(`Passing classes to store methods has been removed. Please pass a dasherized string instead of ${modelName}`, typeof modelName === 'string');
     let normalizedModelName = normalizeModelName(modelName);
-    let liveRecordArray = this.recordArrayManager.liveRecordArrayFor(normalizedModelName);
-
-    this.recordArrayManager.syncLiveRecordArray(liveRecordArray, normalizedModelName);
-
-    return liveRecordArray;
+    return this.recordArrayManager.liveRecordArrayFor(normalizedModelName);
   },
 
   /**
-   This method unloads all records in the store.
-   It schedules unloading to happen during the next run loop.
+    This method unloads all records in the store.
+    It schedules unloading to happen during the next run loop.
 
-   Optionally you can pass a type which unload all records for a given type.
+    Optionally you can pass a type which unload all records for a given type.
 
-   ```javascript
-   store.unloadAll();
-   store.unloadAll('post');
-   ```
+    ```javascript
+    store.unloadAll();
+    store.unloadAll('post');
+    ```
 
-   @method unloadAll
-   @param {String} modelName
+    @method unloadAll
+    @param {String} modelName
   */
   unloadAll(modelName) {
     assert(`Passing classes to store methods has been removed. Please pass a dasherized string instead of ${modelName}`, !modelName || typeof modelName === 'string');
@@ -1878,7 +1873,8 @@ Store = Service.extend({
       let operation;
 
       if (internalModel.currentState.stateName === 'root.deleted.saved') {
-        return resolver.resolve();
+        resolver.resolve();
+        continue;
       } else if (internalModel.isNew()) {
         operation = 'createRecord';
       } else if (internalModel.isDeleted()) {
@@ -1979,6 +1975,11 @@ Store = Service.extend({
       return;
     }
 
+    let existingInternalModel = this._existingInternalModelForId(modelName, id);
+
+    assert(`'${modelName}' was saved to the server, but the response returned the new id '${id}', which has already been used with another record.'`,
+      isNone(existingInternalModel) || existingInternalModel === internalModel);
+
     this._internalModelsFor(internalModel.modelName).set(id, internalModel);
 
     internalModel.setId(id);
@@ -2010,11 +2011,18 @@ Store = Service.extend({
   */
   _load(data) {
     heimdall.increment(_load);
-    let internalModel = this._internalModelForId(data.type, data.id);
+    let modelName = normalizeModelName(data.type);
+    let internalModel = this._internalModelForId(modelName, data.id);
+
+    let isUpdate = internalModel.currentState.isEmpty === false;
 
     internalModel.setupData(data);
 
-    this.recordArrayManager.recordDidChange(internalModel);
+    if (isUpdate) {
+      this.recordArrayManager.recordDidChange(internalModel);
+    } else {
+      this.recordArrayManager.recordWasLoaded(internalModel);
+    }
 
     return internalModel;
   },
@@ -2070,7 +2078,7 @@ Store = Service.extend({
 
     The class of a model might be useful if you want to get a list of all the
     relationship names of the model, see
-    [`relationshipNames`](http://emberjs.com/api/data/classes/DS.Model.html#property_relationshipNames)
+    [`relationshipNames`](https://emberjs.com/api/data/classes/DS.Model.html#property_relationshipNames)
     for example.
 
     @method modelFor
@@ -2372,7 +2380,7 @@ Store = Service.extend({
     assert(`You must include an 'id' for ${modelName} in an object passed to 'push'`, data.id !== null && data.id !== undefined && data.id !== '');
     assert(`You tried to push data with a type '${modelName}' but no model could be found with that name.`, this._hasModelFor(modelName));
 
-    runInDebug(() => {
+    if (DEBUG) {
       // If ENV.DS_WARN_ON_UNKNOWN_KEYS is set to true and the payload
       // contains unknown attributes or relationships, log a warning.
 
@@ -2393,7 +2401,7 @@ Store = Service.extend({
         let unknownRelationshipsMessage = `The payload for '${modelName}' contains these unknown relationships: ${unknownRelationships}. Make sure they've been defined in your model.`;
         warn(unknownRelationshipsMessage, unknownRelationships.length === 0, { id: 'ds.store.unknown-keys-in-payload' });
       }
-    });
+    }
 
     // Actually load the record into the store.
     let internalModel = this._load(data);
@@ -2424,9 +2432,10 @@ Store = Service.extend({
     // payload push.  In the common case where we are pushing many more
     // instances than types we want to minimize the cost of looking up the
     // inverse map and the overhead of Ember.get adds up.
-    let modelNameToInverseMap = Object.create(null);
+    let modelNameToInverseMap;
 
     for (let i = 0, l = pushed.length; i < l; i += 2) {
+      modelNameToInverseMap = modelNameToInverseMap || Object.create(null);
       // This will convert relationships specified as IDs into DS.Model instances
       // (possibly unloaded) and also create the data structures used to track
       // relationships.
@@ -2486,7 +2495,7 @@ Store = Service.extend({
     ```
 
     ```js
-    store.pushPayload('comment', pushData); // Will use the application serializer
+    store.pushPayload(pushData); // Will use the application serializer
     store.pushPayload('post', pushData); // Will use the post serializer
     ```
 
@@ -2559,21 +2568,33 @@ Store = Service.extend({
 
     assert(`You can no longer pass a modelClass as the first argument to store._buildInternalModel. Pass modelName instead.`, typeof modelName === 'string');
 
-    let recordMap = this._internalModelsFor(modelName);
+    let existingInternalModel = this._existingInternalModelForId(modelName, id);
 
-    assert(`The id ${id} has already been used with another record for modelClass '${modelName}'.`, !id || !recordMap.get(id));
+    assert(`The id ${id} has already been used with another record for modelClass '${modelName}'.`, !existingInternalModel);
 
     // lookupFactory should really return an object that creates
     // instances with the injections applied
     let internalModel = new InternalModel(modelName, id, this, data);
 
-    recordMap.add(internalModel, id);
+    this._internalModelsFor(modelName).add(internalModel, id);
 
     return internalModel;
   },
 
+  _existingInternalModelForId(modelName, id) {
+    let internalModel = this._internalModelsFor(modelName).get(id);
+
+    if (internalModel && internalModel.hasScheduledDestroy()) {
+      // unloadRecord is async, if one attempts to unload + then sync create,
+      // we must ensure the unload is complete before starting the create
+      internalModel.destroySync();
+      internalModel = null;
+    }
+    return internalModel;
+  },
+
   buildInternalModel(modelName, id, data) {
-    deprecate('buildInternalModel was documented as private and will be removed in the next version of Ember Data.');
+    deprecate('buildInternalModel was documented as private and will be removed in the next version of Ember Data.', false, { id: 'ember-data.buildInternalModel', until: '2.17.0' });
     return this._buildInternalModel(modelName, id, data);
   },
 
@@ -2853,23 +2874,18 @@ function isInverseRelationshipInitialized(store, internalModel, data, key, model
 }
 
 function setupRelationships(store, internalModel, data, modelNameToInverseMap) {
-  let relationships = internalModel._relationships;
-
-  internalModel.type.eachRelationship(relationshipName => {
-    if (!data.relationships[relationshipName]) {
-      return;
-    }
-
+  Object.keys(data.relationships).forEach(relationshipName => {
+    let relationships = internalModel._relationships;
     let relationshipRequiresNotification = relationships.has(relationshipName) ||
       isInverseRelationshipInitialized(store, internalModel, data, relationshipName, modelNameToInverseMap);
 
     if (relationshipRequiresNotification) {
       let relationshipData = data.relationships[relationshipName];
-      relationships.get(relationshipName).push(relationshipData);
+      relationships.get(relationshipName).push(relationshipData, false);
     }
 
     // in debug, assert payload validity eagerly
-    runInDebug(() => {
+    if (DEBUG) {
       let relationshipMeta = get(internalModel.type, 'relationshipsByName').get(relationshipName);
       let relationshipData = data.relationships[relationshipName];
       if (!relationshipData || !relationshipMeta) {
@@ -2888,7 +2904,7 @@ function setupRelationships(store, internalModel, data, modelNameToInverseMap) {
           assert(`A ${internalModel.type.modelName} record was pushed into the store with the value of ${relationshipName} being '${inspect(relationshipData.data)}', but ${relationshipName} is a hasMany relationship so the value must be an array. You should probably check your data payload or serializer.`, Array.isArray(relationshipData.data));
         }
       }
-    });
+    }
   });
 }
 

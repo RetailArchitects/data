@@ -1,10 +1,10 @@
-import Model from 'ember-data/model';
-import Ember from 'ember';
+import { resolve } from 'rsvp';
+import Model from '../model/model';
 import Reference from './reference';
 
 import isEnabled from '../../features';
-import { assertPolymorphicType, deprecate } from "ember-data/-private/debug";
-
+import { deprecate } from '@ember/debug';
+import { assertPolymorphicType } from 'ember-data/-debug';
 
 /**
    A BelongsToReference is a low level API that allows users and
@@ -189,7 +189,7 @@ BelongsToReference.prototype.link = function() {
     ```
 
    @method meta
-   @return {Object} The meta information for the belongs-oo relationship.
+   @return {Object} The meta information for the belongs-to relationship.
 */
 BelongsToReference.prototype.meta = function() {
   return this.belongsToRelationship.meta;
@@ -240,7 +240,7 @@ BelongsToReference.prototype.meta = function() {
    @return {Promise<record>} A promise that resolves with the new value in this belongs-to relationship.
 */
 BelongsToReference.prototype.push = function(objectOrPromise) {
-  return Ember.RSVP.resolve(objectOrPromise).then((data) => {
+  return resolve(objectOrPromise).then((data) => {
     let record;
 
     if (data instanceof Model) {
@@ -308,7 +308,6 @@ BelongsToReference.prototype.push = function(objectOrPromise) {
     ```
 
    @method value
-   @param {Object|Promise} objectOrPromise a promise that resolves to a JSONAPI document object describing the new value of this relationship.
    @return {DS.Model} the record in this relationship
 */
 BelongsToReference.prototype.value = function() {
@@ -352,6 +351,7 @@ BelongsToReference.prototype.value = function() {
     userRef.load().then(function(user) {
       userRef.value() === user
     });
+    ```
 
    @method load
    @return {Promise} a promise that resolves with the record in this belongs-to relationship.
@@ -398,6 +398,7 @@ BelongsToReference.prototype.load = function() {
     userRef.reload().then(function(user) {
       userRef.value() === user
     });
+    ```
 
    @method reload
    @return {Promise} a promise that resolves with the record in this belongs-to relationship after the reload has completed.

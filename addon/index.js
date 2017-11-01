@@ -1,7 +1,6 @@
+import EmberError from '@ember/error';
 import Ember from "ember";
-import { deprecate } from "ember-data/-private/debug";
-import isEnabled from "./-private/features";
-import global from "./-private/global";
+import { deprecate } from '@ember/debug';
 
 /**
   Ember Data
@@ -10,37 +9,34 @@ import global from "./-private/global";
 */
 
 if (Ember.VERSION.match(/^1\.([0-9]|1[0-2])\./)) {
-  throw new Ember.Error("Ember Data requires at least Ember 1.13.0, but you have " +
+  throw new EmberError("Ember Data requires at least Ember 1.13.0, but you have " +
                         Ember.VERSION +
                         ". Please upgrade your version of Ember, then upgrade Ember Data.");
 }
 
-import DS from "./-private/core";
-
-import normalizeModelName from "./-private/system/normalize-model-name";
-
-import InternalModel from "./-private/system/model/internal-model";
-
 import {
-  PromiseArray,
-  PromiseObject,
-  PromiseManyArray
-} from "./-private/system/promise-proxies";
-import {
-  Store
-} from "./-private/system/store";
-import {
+  Snapshot,
+  DebugAdapter,
+  InternalModel,
+  DS,
+  BuildURLMixin,
+  belongsTo,
+  hasMany,
+  global,
   Errors,
   RootState,
-  attr
-} from "./-private/system/model";
-import Model from "./model";
-import Snapshot from "./-private/system/snapshot";
-import Adapter from "./adapter";
-import Serializer from "./serializer";
-import DebugAdapter from './-private/system/debug/debug-adapter';
-
-import {
+  Model,
+  Store,
+  normalizeModelName,
+  PromiseArray,
+  PromiseObject,
+  PromiseManyArray,
+  RecordArray,
+  FilteredRecordArray,
+  AdapterPopulatedRecordArray,
+  ManyArray,
+  RecordArrayManager,
+  Relationship,
   AdapterError,
   InvalidError,
   UnauthorizedError,
@@ -52,37 +48,29 @@ import {
   AbortError,
   errorsHashToArray,
   errorsArrayToHash
-} from "./adapters/errors";
+} from './-private';
 
-import {
-  RecordArray,
-  FilteredRecordArray,
-  AdapterPopulatedRecordArray
-} from "./-private/system/record-arrays";
-import ManyArray from "./-private/system/many-array";
-import RecordArrayManager from "./-private/system/record-array-manager";
+import "ember-inflector";
+import setupContainer from "./setup-container";
+import initializeStoreService from './initialize-store-service';
+
+import Transform from './transforms/transform';
+import NumberTransform from './transforms/number';
+import DateTransform from './transforms/date';
+import StringTransform from './transforms/string';
+import BooleanTransform from './transforms/boolean';
+
+import Adapter from "./adapter";
 import JSONAPIAdapter from './adapters/json-api';
 import RESTAdapter from './adapters/rest';
-import BuildURLMixin from "./-private/adapters/build-url-mixin";
+
+import Serializer from "./serializer";
 import JSONAPISerializer from './serializers/json-api';
 import JSONSerializer from './serializers/json';
 import RESTSerializer from './serializers/rest';
-import "ember-inflector";
+
 import EmbeddedRecordsMixin from "./serializers/embedded-records-mixin";
-
-import {
-  Transform,
-  DateTransform,
-  NumberTransform,
-  StringTransform,
-  BooleanTransform
-} from "./-private/transforms";
-
-import {hasMany, belongsTo} from "./relationships";
-import setupContainer from "./setup-container";
-import initializeStoreService from './-private/instance-initializers/initialize-store-service';
-
-import Relationship from "./-private/system/relationships/state/relationship";
+import attr from './attr';
 
 DS.Store         = Store;
 DS.PromiseArray  = PromiseArray;
@@ -105,13 +93,11 @@ DS.InvalidError = InvalidError;
 DS.TimeoutError = TimeoutError;
 DS.AbortError   = AbortError;
 
-if (isEnabled('ds-extended-errors')) {
-  DS.UnauthorizedError = UnauthorizedError;
-  DS.ForbiddenError    = ForbiddenError;
-  DS.NotFoundError     = NotFoundError;
-  DS.ConflictError     = ConflictError;
-  DS.ServerError       = ServerError;
-}
+DS.UnauthorizedError = UnauthorizedError;
+DS.ForbiddenError    = ForbiddenError;
+DS.NotFoundError     = NotFoundError;
+DS.ConflictError     = ConflictError;
+DS.ServerError       = ServerError;
 
 DS.errorsHashToArray = errorsHashToArray;
 DS.errorsArrayToHash = errorsArrayToHash;

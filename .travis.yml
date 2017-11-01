@@ -1,23 +1,39 @@
 ---
 language: node_js
 sudo: false
+dist: trusty
 node_js:
-  - "6.9"
+  - "4"
+  - "6"
+
+# hack to get after_success skipped in node 4
+matrix:
+  exclude:
+    - node_js: "4"
+  include:
+    - node_js: "4"
+      after_success: skip
+
+cache:
+  yarn: true
+
 before_install:
-  - "npm config set spin false"
-  - "npm install -g npm@^2"
+  - curl -o- -L https://yarnpkg.com/install.sh | bash
+  - export PATH=$HOME/.yarn/bin:$PATH
+  - yarn global add phantomjs-prebuilt
+  - phantomjs --version
 
 install:
-  - npm install --no-optional
-  - ./node_modules/.bin/bower install
+  - yarn install --no-lockfile --no-interactive
+
 script:
   - ./bin/lint-features
-  - npm run-script test
-  - npm run-script test:optional-features
-  - npm run-script test:production
-  - npm run-script node-tests
+  - yarn run test
+  - yarn run test:optional-features
+  - yarn run test:production
+  - yarn run node-tests
 after_success:
-  - npm run-script production
+  - yarn run production
   - "./bin/publish-builds"
 env:
   global:

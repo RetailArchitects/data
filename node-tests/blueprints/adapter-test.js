@@ -58,7 +58,7 @@ describe('Acceptance: generate and destroy adapter blueprints', function() {
       }));
   });
 
-  it('adapter throws when --base-class is same as name', function() {
+  xit('adapter throws when --base-class is same as name', function() {
     var args = ['adapter', 'foo', '--base-class=foo'];
 
     return emberNew()
@@ -87,23 +87,6 @@ describe('Acceptance: generate and destroy adapter blueprints', function() {
       .then(() => emberGenerateDestroy(args, _file => {
         expect(_file('tests/unit/adapters/foo-test.js'))
           .to.contain('moduleFor(\'adapter:foo\'');
-      }));
-  });
-
-  it('adapter-test for mocha', function() {
-    var args = ['adapter-test', 'foo'];
-
-    return emberNew()
-      .then(() => modifyPackages([
-        {name: 'ember-cli-qunit', delete: true},
-        {name: 'ember-cli-mocha', dev: true}
-      ]))
-      .then(() => generateFakePackageManifest('ember-cli-mocha', '0.11.0'))
-      .then(() => emberGenerateDestroy(args, _file => {
-        expect(_file('tests/unit/adapters/foo-test.js'))
-          .to.contain('import { describeModule, it } from \'ember-mocha\';')
-          .to.contain('describeModule(\n  \'adapter:foo\',')
-          .to.contain('expect(adapter).to.be.ok;');
       }));
   });
 

@@ -2,16 +2,21 @@
   @module ember-data
 */
 
-import Ember from 'ember';
-import { singularize } from "ember-inflector";
-import { assert, deprecate, runInDebug, warn } from "ember-data/-private/debug";
-import JSONSerializer from "../serializers/json";
-import normalizeModelName from "../-private/system/normalize-model-name";
-import coerceId from "../-private/system/coerce-id";
-import { modelHasAttributeOrRelationshipNamedType } from "../-private/utils";
-import isEnabled from '../-private/features';
+import { typeOf, isNone } from '@ember/utils';
 
-let camelize = Ember.String.camelize;
+import { makeArray } from '@ember/array';
+import { camelize } from '@ember/string';
+import { singularize } from "ember-inflector";
+import { assert, deprecate, warn } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
+
+import JSONSerializer from "../serializers/json";
+import {
+  coerceId,
+  modelHasAttributeOrRelationshipNamedType,
+  normalizeModelName,
+  isEnabled
+} from '../-private';
 
 /**
   Normally, applications will use the `RESTSerializer` by implementing
@@ -38,10 +43,11 @@ let camelize = Ember.String.camelize;
 
   ```app/serializers/application.js
   import DS from 'ember-data';
+  import { underscore } from '@ember/string';
 
   export default DS.RESTSerializer.extend({
     keyForAttribute(attr, method) {
-      return Ember.String.underscore(attr).toUpperCase();
+      return underscore(attr).toUpperCase();
     }
   });
   ```
@@ -55,7 +61,7 @@ let camelize = Ember.String.camelize;
   @namespace DS
   @extends DS.JSONSerializer
 */
-let RESTSerializer = JSONSerializer.extend({
+const RESTSerializer = JSONSerializer.extend({
 
   /**
    `keyForPolymorphicType` can be used to define a custom key when
@@ -186,7 +192,7 @@ let RESTSerializer = JSONSerializer.extend({
     let modelClass = store.modelFor(modelName);
     let serializer = store.serializerFor(modelName);
 
-    Ember.makeArray(arrayHash).forEach((hash) => {
+    makeArray(arrayHash).forEach((hash) => {
       let { data, included } = this._normalizePolymorphicRecord(store, hash, prop, modelClass, serializer);
       documentHash.data.push(data);
       if (included) {
@@ -250,16 +256,16 @@ let RESTSerializer = JSONSerializer.extend({
 
     let meta = this.extractMeta(store, primaryModelClass, payload);
     if (meta) {
-      assert('The `meta` returned from `extractMeta` has to be an object, not "' + Ember.typeOf(meta) + '".', Ember.typeOf(meta) === 'object');
+      assert('The `meta` returned from `extractMeta` has to be an object, not "' + typeOf(meta) + '".', typeOf(meta) === 'object');
       documentHash.meta = meta;
     }
 
     let keys = Object.keys(payload);
 
-    for (let i = 0, length = keys.length; i < length; i++) {
-      let prop = keys[i];
-      let modelName = prop;
-      let forcedSecondary = false;
+    for (var i = 0, length = keys.length; i < length; i++) {
+      var prop = keys[i];
+      var modelName = prop;
+      var forcedSecondary = false;
 
       /*
         If you want to provide sideloaded records of the same type that the
@@ -286,7 +292,7 @@ let RESTSerializer = JSONSerializer.extend({
         modelName = prop.substr(1);
       }
 
-      let typeName = this.modelNameFromPayloadKey(modelName);
+      var typeName = this.modelNameFromPayloadKey(modelName);
       if (!store.modelFactoryFor(typeName)) {
         warn(this.warnMessageNoModelForKey(modelName, typeName), false, {
           id: 'ds.serializer.model-for-key-missing'
@@ -294,14 +300,14 @@ let RESTSerializer = JSONSerializer.extend({
         continue;
       }
 
-      let isPrimary = (!forcedSecondary && this.isPrimaryType(store, typeName, primaryModelClass));
-      let value = payload[prop];
+      var isPrimary = (!forcedSecondary && this.isPrimaryType(store, typeName, primaryModelClass));
+      var value = payload[prop];
 
       if (value === null) {
         continue;
       }
 
-      runInDebug(function() {
+      if (DEBUG) {
         let isQueryRecordAnArray = requestType === 'queryRecord' && isPrimary && Array.isArray(value);
         let message = "The adapter returned an array for the primary data of a `queryRecord` response. This is deprecated as `queryRecord` should return a single record.";
 
@@ -309,7 +315,7 @@ let RESTSerializer = JSONSerializer.extend({
           id: 'ds.serializer.rest.queryRecord-array-response',
           until: '3.0'
         });
-      });
+      }
 
       /*
         Support primary data as an object instead of an array.
@@ -322,7 +328,7 @@ let RESTSerializer = JSONSerializer.extend({
         }
         ```
        */
-      if (isPrimary && Ember.typeOf(value) !== 'array') {
+      if (isPrimary && !Array.isArray(value)) {
         let { data, included } = this._normalizePolymorphicRecord(store, value, prop, primaryModelClass, this);
         documentHash.data = data;
         if (included) {
@@ -338,7 +344,7 @@ let RESTSerializer = JSONSerializer.extend({
       }
 
       if (isSingle) {
-        data.forEach((resource) => {
+        data.forEach(resource => {
 
           /*
             Figures out if this is the primary record or not.
@@ -413,18 +419,18 @@ let RESTSerializer = JSONSerializer.extend({
       included: []
     };
 
-    for (let prop in payload) {
-      let modelName = this.modelNameFromPayloadKey(prop);
+    for (var prop in payload) {
+      var modelName = this.modelNameFromPayloadKey(prop);
       if (!store.modelFactoryFor(modelName)) {
         warn(this.warnMessageNoModelForKey(prop, modelName), false, {
           id: 'ds.serializer.model-for-key-missing'
         });
         continue;
       }
-      let type = store.modelFor(modelName);
-      let typeSerializer = store.serializerFor(type.modelName);
+      var type = store.modelFor(modelName);
+      var typeSerializer = store.serializerFor(type.modelName);
 
-      Ember.makeArray(payload[prop]).forEach((hash) => {
+      makeArray(payload[prop]).forEach(hash => {
         let { data, included } = typeSerializer.normalize(type, hash, prop);
         documentHash.data.push(data);
         if (included) {
@@ -587,6 +593,7 @@ let RESTSerializer = JSONSerializer.extend({
 
     ```app/serializers/application.js
     import DS from 'ember-data';
+    import { pluralize } from 'ember-inflector';
 
     export default DS.RESTSerializer.extend({
       serialize(snapshot, options) {
@@ -615,7 +622,7 @@ let RESTSerializer = JSONSerializer.extend({
     }
 
     function serverHasManyName(name) {
-      return serverAttributeName(name.singularize()) + "_IDS";
+      return serverAttributeName(singularize(name)) + "_IDS";
     }
     ```
 
@@ -669,10 +676,11 @@ let RESTSerializer = JSONSerializer.extend({
 
     ```app/serializers/application.js
     import DS from 'ember-data';
+    import { decamelize } from '@ember/string';
 
     export default DS.RESTSerializer.extend({
       serializeIntoHash(data, type, record, options) {
-        var root = Ember.String.decamelize(type.modelName);
+        var root = decamelize(type.modelName);
         data[root] = this.serialize(record, options);
       }
     });
@@ -710,10 +718,11 @@ let RESTSerializer = JSONSerializer.extend({
 
     ```app/serializers/application.js
     import DS from 'ember-data';
+    import { dasherize } from '@ember/string';
 
     export default DS.RESTSerializer.extend({
       payloadKeyFromModelName(modelName) {
-        return Ember.String.dasherize(modelName);
+        return dasherize(modelName);
       }
     });
     ```
@@ -771,7 +780,7 @@ let RESTSerializer = JSONSerializer.extend({
       typeKey = key;
     }
 
-    if (Ember.isNone(belongsTo)) {
+    if (isNone(belongsTo)) {
       json[typeKey] = null;
     } else {
       if (isEnabled("ds-payload-type-hooks")) {
@@ -975,12 +984,12 @@ if (isEnabled("ds-payload-type-hooks")) {
 
 }
 
-runInDebug(function() {
+if (DEBUG) {
   RESTSerializer.reopen({
     warnMessageNoModelForKey(prop, typeKey) {
       return 'Encountered "' + prop + '" in payload, but no model was found for model name "' + typeKey + '" (resolved model name using ' + this.constructor.toString() + '.modelNameFromPayloadKey("' + prop + '"))';
     }
   });
-});
+}
 
 export default RESTSerializer;

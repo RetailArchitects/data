@@ -2,14 +2,15 @@
   @module ember-data
 */
 
-import Ember from 'ember';
-import { pluralize, singularize } from 'ember-inflector';
-import { assert, deprecate, runInDebug, warn } from 'ember-data/-private/debug';
-import JSONSerializer from './json';
-import normalizeModelName from '../-private/system/normalize-model-name';
-import isEnabled from '../-private/features';
+import { typeOf, isNone } from '@ember/utils';
 
-const dasherize = Ember.String.dasherize;
+import { dasherize } from '@ember/string';
+import { pluralize, singularize } from 'ember-inflector';
+import { assert, deprecate, warn } from '@ember/debug';
+import { DEBUG } from '@glimmer/env';
+
+import JSONSerializer from './json';
+import { normalizeModelName, isEnabled } from '../-private';
 
 /**
   Ember Data 2.0 Serializer:
@@ -137,7 +138,7 @@ const JSONAPISerializer = JSONSerializer.extend({
   */
   _normalizeDocumentHelper(documentHash) {
 
-    if (Ember.typeOf(documentHash.data) === 'object') {
+    if (typeOf(documentHash.data) === 'object') {
       documentHash.data = this._normalizeResourceHelper(documentHash.data);
     } else if (Array.isArray(documentHash.data)) {
       let ret = new Array(documentHash.data.length);
@@ -151,11 +152,13 @@ const JSONAPISerializer = JSONSerializer.extend({
     }
 
     if (Array.isArray(documentHash.included)) {
-      let ret = new Array(documentHash.included.length);
-
+      let ret = new Array();
       for (let i = 0; i < documentHash.included.length; i++) {
         let included = documentHash.included[i];
-        ret[i] = this._normalizeResourceHelper(included);
+        let normalized = this._normalizeResourceHelper(included);
+        if (normalized !== null) { // can be null when unknown type is encountered
+          ret.push(normalized);
+        }
       }
 
       documentHash.included = ret;
@@ -199,7 +202,7 @@ const JSONAPISerializer = JSONSerializer.extend({
     @private
   */
   _normalizeResourceHelper(resourceHash) {
-    assert(this.warnMessageForUndefinedType(), !Ember.isNone(resourceHash.type), {
+    assert(this.warnMessageForUndefinedType(), !isNone(resourceHash.type), {
       id: 'ds.serializer.type-is-undefined'
     });
 
@@ -287,11 +290,11 @@ const JSONAPISerializer = JSONSerializer.extend({
         if (resourceHash.attributes[attributeKey] !== undefined) {
           attributes[key] = resourceHash.attributes[attributeKey];
         }
-        runInDebug(() => {
+        if (DEBUG) {
           if (resourceHash.attributes[attributeKey] === undefined && resourceHash.attributes[key] !== undefined) {
             assert(`Your payload for '${modelClass.modelName}' contains '${key}', but your serializer is setup to look for '${attributeKey}'. This is most likely because Ember Data's JSON API serializer dasherizes attribute keys by default. You should subclass JSONAPISerializer and implement 'keyForAttribute(key) { return key; }' to prevent Ember Data from customizing your attribute keys.`, false);
           }
-        });
+        }
       });
     }
 
@@ -300,7 +303,7 @@ const JSONAPISerializer = JSONSerializer.extend({
 
   extractRelationship(relationshipHash) {
 
-    if (Ember.typeOf(relationshipHash.data) === 'object') {
+    if (typeOf(relationshipHash.data) === 'object') {
       relationshipHash.data = this._normalizeRelationshipDataHelper(relationshipHash.data);
     }
 
@@ -330,11 +333,11 @@ const JSONAPISerializer = JSONSerializer.extend({
           relationships[key] = this.extractRelationship(relationshipHash);
 
         }
-        runInDebug(() => {
+        if (DEBUG) {
           if (resourceHash.relationships[relationshipKey] === undefined && resourceHash.relationships[key] !== undefined) {
             assert(`Your payload for '${modelClass.modelName}' contains '${key}', but your serializer is setup to look for '${relationshipKey}'. This is most likely because Ember Data's JSON API serializer dasherizes relationship keys by default. You should subclass JSONAPISerializer and implement 'keyForRelationship(key) { return key; }' to prevent Ember Data from customizing your relationship keys.`, false);
           }
-        });
+        }
       });
     }
 
@@ -421,30 +424,31 @@ const JSONAPISerializer = JSONSerializer.extend({
   },
 
   /**
-   `keyForAttribute` can be used to define rules for how to convert an
-   attribute name in your model to a key in your JSON.
-   By default `JSONAPISerializer` follows the format used on the examples of
-   http://jsonapi.org/format and uses dashes as the word separator in the JSON
-   attribute keys.
+    `keyForAttribute` can be used to define rules for how to convert an
+    attribute name in your model to a key in your JSON.
+    By default `JSONAPISerializer` follows the format used on the examples of
+    http://jsonapi.org/format and uses dashes as the word separator in the JSON
+    attribute keys.
 
-   This behaviour can be easily customized by extending this method.
+    This behaviour can be easily customized by extending this method.
 
-   Example
+    Example
 
-   ```app/serializers/application.js
-   import DS from 'ember-data';
+    ```app/serializers/application.js
+    import DS from 'ember-data';
+    import { dasherize } from '@ember/string';
 
-   export default DS.JSONAPISerializer.extend({
-     keyForAttribute(attr, method) {
-       return Ember.String.dasherize(attr).toUpperCase();
-     }
-   });
-   ```
+    export default DS.JSONAPISerializer.extend({
+      keyForAttribute(attr, method) {
+        return dasherize(attr).toUpperCase();
+      }
+    });
+    ```
 
-   @method keyForAttribute
-   @param {String} key
-   @param {String} method
-   @return {String} normalized key
+    @method keyForAttribute
+    @param {String} key
+    @param {String} method
+    @return {String} normalized key
   */
   keyForAttribute(key, method) {
     return dasherize(key);
@@ -463,10 +467,11 @@ const JSONAPISerializer = JSONSerializer.extend({
 
     ```app/serializers/post.js
     import DS from 'ember-data';
+    import { underscore } from '@ember/string';
 
     export default DS.JSONAPISerializer.extend({
       keyForRelationship(key, relationship, method) {
-        return Ember.String.underscore(key);
+        return underscore(key);
       }
     });
     ```
@@ -735,11 +740,11 @@ if (isEnabled("ds-payload-type-hooks")) {
 
 }
 
-runInDebug(function() {
+if (DEBUG) {
   JSONAPISerializer.reopen({
     willMergeMixin(props) {
       let constructor = this.constructor;
-      warn(`You've defined 'extractMeta' in ${constructor.toString()} which is not used for serializers extending JSONAPISerializer. Read more at http://emberjs.com/api/data/classes/DS.JSONAPISerializer.html#toc_customizing-meta on how to customize meta when using JSON API.`, Ember.isNone(props.extractMeta) || props.extractMeta === JSONSerializer.prototype.extractMeta, {
+      warn(`You've defined 'extractMeta' in ${constructor.toString()} which is not used for serializers extending JSONAPISerializer. Read more at https://emberjs.com/api/data/classes/DS.JSONAPISerializer.html#toc_customizing-meta on how to customize meta when using JSON API.`, isNone(props.extractMeta) || props.extractMeta === JSONSerializer.prototype.extractMeta, {
         id: 'ds.serializer.json-api.extractMeta'
       });
       warn('The JSONAPISerializer does not work with the EmbeddedRecordsMixin because the JSON API spec does not describe how to format embedded resources.', !props.isEmbeddedRecordsMixin, {
@@ -753,6 +758,6 @@ runInDebug(function() {
       return `Encountered a resource object with type "${originalType}", but no model was found for model name "${modelName}" (resolved model name using '${this.constructor.toString()}.${usedLookup}("${originalType}")').`;
     }
   });
-});
+}
 
 export default JSONAPISerializer;

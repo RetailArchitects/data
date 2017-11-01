@@ -1,9 +1,7 @@
-import Ember from 'ember';
+import { get } from '@ember/object';
 import ManyRelationship from "./has-many";
 import BelongsToRelationship from "./belongs-to";
-import { runInDebug } from 'ember-data/-private/debug';
-
-const { get } = Ember;
+import { DEBUG } from '@glimmer/env';
 
 function shouldFindInverse(relationshipMeta) {
   let options = relationshipMeta.options;
@@ -16,10 +14,8 @@ function createRelationshipFor(internalModel, relationshipMeta, store) {
 
   if (shouldFindInverse(relationshipMeta)) {
     inverse = internalModel.type.inverseFor(relationshipMeta.key, store);
-  } else {
-    runInDebug(() => {
-      internalModel.type.typeForRelationship(relationshipMeta.key, store);
-    });
+  } else if (DEBUG) {
+    internalModel.type.typeForRelationship(relationshipMeta.key, store);
   }
 
   if (inverse) {
@@ -46,6 +42,13 @@ export default class Relationships {
 
   has(key) {
     return !!this.initializedRelationships[key];
+  }
+
+  forEach(cb) {
+    let rels = this.initializedRelationships;
+    Object.keys(rels).forEach(name => {
+      cb(name, rels[name]);
+    });
   }
 
   get(key) {

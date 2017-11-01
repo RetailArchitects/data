@@ -1,13 +1,8 @@
-import Model from "./-private/system/model";
-
-import {
-  RootState,
-  Errors
-} from "./-private/system/model";
-
-export default Model;
-
 export {
   RootState,
   Errors
-};
+}
+from "./-private/system/model";
+
+export { Model as default }
+from './-private';

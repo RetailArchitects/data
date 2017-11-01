@@ -1,7 +1,5 @@
-import Ember from 'ember';
-import Transform from "../../transform";
-
-const empty = Ember.isEmpty;
+import { isEmpty as empty } from '@ember/utils';
+import Transform from './transform';
 
 function isNumber(value) {
   return value === value && value !== Infinity && value !== -Infinity;

@@ -1,20 +1,14 @@
-import Ember from 'ember';
-import { assert, warn } from "ember-data/-private/debug";
+import { A } from '@ember/array';
+import { Promise } from 'rsvp';
+import { assert, warn } from '@ember/debug';
 import {
   _bind,
   _guard,
   _objectIsAlive
-} from "ember-data/-private/system/store/common";
+} from "./common";
 
-import {
-  normalizeResponseHelper
-} from "ember-data/-private/system/store/serializer-response";
-
-import {
-  serializerForAdapter
-} from "ember-data/-private/system/store/serializers";
-
-const { Promise } = Ember.RSVP;
+import { normalizeResponseHelper } from "./serializer-response";
+import { serializerForAdapter } from "./serializers";
 
 function payloadIsNotBlank(adapterPayload) {
   if (Array.isArray(adapterPayload)) {
@@ -39,7 +33,7 @@ export function _find(adapter, store, modelClass, id, internalModel, options) {
     let payload = normalizeResponseHelper(serializer, store, modelClass, adapterPayload, id, 'findRecord');
     assert(`Ember Data expected the primary data returned from a 'findRecord' response to be an object but instead it found an array.`, !Array.isArray(payload.data));
 
-    warn(`You requested a record of type '${modelName}' with id '${id}' but the adapter returned a payload with primary data having an id of '${payload.data.id}'. Use 'store.findRecord()' when the requested id is the same as the one returned by the adapter. In other cases use 'store.queryRecord()' instead http://emberjs.com/api/data/classes/DS.Store.html#method_queryRecord`, payload.data.id === id, {
+    warn(`You requested a record of type '${modelName}' with id '${id}' but the adapter returned a payload with primary data having an id of '${payload.data.id}'. Use 'store.findRecord()' when the requested id is the same as the one returned by the adapter. In other cases use 'store.queryRecord()' instead https://emberjs.com/api/data/classes/DS.Store.html#method_queryRecord`, payload.data.id === id, {
       id: 'ds.store.findRecord.id-mismatch'
     });
 
@@ -55,7 +49,7 @@ export function _find(adapter, store, modelClass, id, internalModel, options) {
 }
 
 export function _findMany(adapter, store, modelName, ids, internalModels) {
-  let snapshots = Ember.A(internalModels).invoke('createSnapshot');
+  let snapshots = A(internalModels).invoke('createSnapshot');
   let modelClass = store.modelFor(modelName); // `adapter.findMany` gets the modelClass still
   let promise = adapter.findMany(store, modelClass, ids, snapshots);
   let label = `DS: Handle Adapter#findMany of '${modelName}'`;
@@ -142,7 +136,14 @@ export function _findAll(adapter, store, modelName, sinceToken, options) {
 
 export function _query(adapter, store, modelName, query, recordArray) {
   let modelClass = store.modelFor(modelName); // adapter.query needs the class
-  let promise = adapter.query(store, modelClass, query, recordArray);
+
+  let promise;
+  if (adapter.query.length > 3) {
+    recordArray = recordArray || store.recordArrayManager.createAdapterPopulatedRecordArray(modelName, query);
+    promise = adapter.query(store, modelClass, query, recordArray);
+  } else {
+    promise = adapter.query(store, modelClass, query);
+  }
 
   let label = `DS: Handle Adapter#query of ${modelClass}`;
 
@@ -159,7 +160,11 @@ export function _query(adapter, store, modelName, query, recordArray) {
     let internalModels = store._push(payload);
 
     assert('The response to store.query is expected to be an array but it was a single record. Please wrap your response in an array or use `store.queryRecord` to query for a single record.', Array.isArray(internalModels));
-    recordArray._setInternalModels(internalModels, payload);
+    if (recordArray) {
+      recordArray._setInternalModels(internalModels, payload);
+    } else {
+      recordArray = store.recordArrayManager.createAdapterPopulatedRecordArray(modelName, query, internalModels, payload);
+    }
 
     return recordArray;
   }, null, `DS: Extract payload of query ${modelName}`);
